@@ -1,0 +1,99 @@
+---
+title: "Practical Machine Learning: Predicting Exercise Manner"
+author: "Pratham Yogeesh Nayak"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    keep_md: true
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit, it is now possible 
+to collect large amounts of data about personal activity. In this project, 
+data from accelerometers on the belt, forearm, arm, and dumbbell of 6 
+participants is used to predict the manner in which they performed barbell 
+lifts (the `classe` variable), which can be one of 5 classes (A-E), 
+corresponding to correct form (A) and four common mistakes (B-E).
+
+## Loading and Cleaning the Data
+
+```{r setup, message=FALSE, warning=FALSE}
+library(caret)
+library(randomForest)
+
+training <- read.csv("pml-training.csv", na.strings = c("NA", "", "#DIV/0!"))
+testing  <- read.csv("pml-testing.csv",  na.strings = c("NA", "", "#DIV/0!"))
+```
+
+The raw dataset contains 160 variables, many of which are summary statistics 
+that are mostly missing, along with bookkeeping columns not useful for 
+prediction. These were removed:
+
+```{r clean}
+na_frac <- colMeans(is.na(training))
+keep_cols <- names(na_frac[na_frac < 0.5])
+training <- training[, keep_cols]
+
+training <- training[, !(names(training) %in% 
+    c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2",
+      "cvtd_timestamp","new_window","num_window"))]
+
+nzv <- nearZeroVar(training)
+if(length(nzv) > 0) training <- training[, -nzv]
+
+dim(training)
+```
+
+This left 52 predictors plus the outcome `classe`.
+
+## Cross-Validation Strategy
+
+The training data was split into a training set (70%) and a validation set 
+(30%). The model itself was also trained using 5-fold cross-validation, so 
+that the reported accuracy reflects performance on data not used to fit 
+each fold.
+
+```{r split}
+set.seed(1234)
+inTrain <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+trainSet <- training[inTrain, ]
+validSet <- training[-inTrain, ]
+```
+
+## Model Building
+
+A random forest model was chosen for its strong performance on 
+high-dimensional sensor data without requiring manual feature engineering.
+
+```{r train}
+modFit <- readRDS("modFit.rds")
+modFit
+```
+
+## Out-of-Sample Error Estimate
+
+The model was evaluated on the held-out validation set (data not used in 
+training or cross-validation):
+
+```{r validate}
+pred <- predict(modFit, validSet)
+confusionMatrix(pred, factor(validSet$classe))
+```
+
+The model achieved **99.39% accuracy** on the validation set, giving an 
+estimated **out-of-sample error of approximately 0.61%** (1 − accuracy).
+
+## Predicting the 20 Test Cases
+
+```{r predict}
+predictions <- predict(modFit, testing)
+predictions
+```
+
+## Conclusion
+
+A random forest model trained with 5-fold cross-validation achieved 
+approximately 99.4% accuracy on a held-out validation set, corresponding 
+to an estimated out-of-sample error rate of about 0.6%. This model was 
+used to generate predictions for the 20 test cases above.
